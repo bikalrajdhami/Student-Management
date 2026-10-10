@@ -1,31 +1,59 @@
+import React, { useState } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 
-import Home from "./Pages/Home";
+import SideBar from "./Components/SideBar";
+import Navbar from "./Components/Navbar";
+import Dashboard from "./Pages/Dashboard";
 import AddStudent from "./Pages/AddStudent";
-import EditStudent from "./Pages/EditStudent";
+import AddTeachers from "./Pages/AddTeachers";
+import TeacherDetails from "./Pages/TeacherDetails";
+import ClassDashboard from "./Pages/ClassDashboard";
+import AddClass from "./Pages/AddClass";
 
-function App() {
+
+
+
+
+const App = () => {
+    const [sidebarOpen, setSidebarOpen] = useState(false);
+
     return (
         <BrowserRouter>
+            <div className="min-h-screen bg-gray-100">
 
-            <Routes>
-
-                <Route path="/" element={<Home />} />
-
-                <Route
-                    path="/add-student"
-                    element={<AddStudent />}
+                {/* Sidebar */}
+                <SideBar
+                    sidebarOpen={sidebarOpen}
+                    setSidebarOpen={setSidebarOpen}
                 />
 
-                <Route
-                    path="/edit-student/:id"
-                    element={<EditStudent />}
-                />
+                {/* Main Content */}
+                <div className="lg:ml-64 min-h-screen">
 
-            </Routes>
+                    {/* Navbar */}
+                    <Navbar
+                        setSidebarOpen={setSidebarOpen}
+                    />
 
+                    {/* Pages */}
+                    <main className="p-6">
+                        <Routes>
+                            <Route path="/" element={<Dashboard />} />
+                            <Route path="/AddStudent" element={<AddStudent />} />
+                            <Route path="/AddTeacher" element={<AddTeachers/>}/>
+                            <Route path="/teacher-details" element={<TeacherDetails/>}/>
+                            <Route path="/class-dashboard" element={<ClassDashboard/>}/>
+                            <Route path="/add-class" element={<AddClass/>}/>
+  
+                        </Routes>
+                        
+                    </main>
+
+                </div>
+
+            </div>
         </BrowserRouter>
     );
-}
+};
 
 export default App;

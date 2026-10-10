@@ -2,6 +2,8 @@
 import React, { useState } from "react";
 import { createStudent } from "../api/studentApi";
 
+
+
 const StudentForm = () => {
 
     const [formData, setFormData] = useState({
@@ -9,7 +11,9 @@ const StudentForm = () => {
         email: "",
         class: "",
         section: "",
-        address: ""
+        address: "",
+        parentname: "",
+        parentphone: ""
     });
 
     const [loading, setLoading] = useState(false);
@@ -48,7 +52,9 @@ const StudentForm = () => {
                 email: "",
                 class: "",
                 section: "",
-                address: ""
+                address: "",
+                parentname: "",
+                parentphone: ""
             });
 
         } catch (error) {
@@ -210,6 +216,44 @@ const StudentForm = () => {
 
                 </div>
 
+                {/* Parent Name */}
+                <div className="mb-6">
+
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Parent Name
+                    </label>
+
+                    <input
+                        type="text"
+                        name="parentname"
+                        value={formData.parentname}
+                        onChange={handleChange}
+                        placeholder="Enter student's Parent Name"
+                        required
+                        className="w-full border border-gray-300 rounded-lg px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+
+                </div>
+
+                {/* Parent Phone Number */}
+                <div className="mb-6">
+
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Parent Phone
+                    </label>
+
+                    <input
+                        type="text"
+                        name="parentphone"
+                        value={formData.parentphone}
+                        onChange={handleChange}
+                        placeholder="Enter student's Parent Phone"
+                        required
+                        className="w-full border border-gray-300 rounded-lg px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+
+                </div>
+
                 {/* Buttons */}
                 <div className="flex gap-4">
 
@@ -229,7 +273,9 @@ const StudentForm = () => {
                                 email: "",
                                 class: "",
                                 section: "",
-                                address: ""
+                                address: "",
+                                parentname: "",
+                                parentphone: ""
                             })
                         }
                         className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-6 py-3 rounded-lg font-medium transition"
@@ -242,8 +288,10 @@ const StudentForm = () => {
             </form>
 
         </div>
+
+    
+
     );
 };
 
 export default StudentForm;
-

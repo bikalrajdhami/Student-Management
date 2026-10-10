@@ -1,5 +1,8 @@
 import React from "react";
 import StudentForm from "../Components/studentForm";
+import StudentsTable from "../Components/StudentsTable";
+
+
 
 const AddStudent = () => {
     return (
@@ -11,8 +14,9 @@ const AddStudent = () => {
                 <StudentForm />
 
             </main>
-
+             <StudentsTable/>
         </div>
+       
     );
 };
 

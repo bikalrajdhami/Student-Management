@@ -25,11 +25,13 @@ async function createStudent(req, res) {
             email,
             class: studentclass,
             section,
-            address
+            address,
+            parentname,
+            parentphone
         } = req.body;
    
 
-        if (!name || !email || !studentclass || !section || !address) {
+        if (!name || !email || !studentclass || !section || !address || !parentname || !parentphone) {
             return res.status(400).json({
                 success: false,
                 message: "Fill all fields"
@@ -42,7 +44,10 @@ async function createStudent(req, res) {
             email,
             class: studentclass,
             section,
-            address
+            address,
+            parentname,
+            parentphone
+
         });
 
         res.status(201).json({
@@ -104,10 +109,12 @@ async function updatestudent(req,res){
         email,
         class: studentclass,
         section,
-        address
+        address,
+        parentname,
+        parentphone
     } = req.body;
     try {
-        const students = await Student.findByIdAndUpdate(id,{name, email, class:studentclass, section, address},
+        const students = await Student.findByIdAndUpdate(id,{name, email, class:studentclass, section, address,parentname, parentphone},
              { returnDocument: "after" }
             );
             if(!students){
