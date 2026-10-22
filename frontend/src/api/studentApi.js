@@ -17,4 +17,4 @@ export const getStudentById = (id) =>
     API.get(`/students/${id}`);
 
 export const updateStudent = (id, student) =>
-    API.put(`/students/${id}`, student);
+    API.patch(`/students/${id}`, student);

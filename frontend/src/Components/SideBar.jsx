@@ -52,7 +52,7 @@ const SideBar = ({ sidebarOpen, setSidebarOpen }) => {
 
                     <div>
                         <h1 className="text-xl font-bold">
-                            School Management
+                            Rising Star English School
                         </h1>
 
                         <p className="text-xs text-slate-400 mt-1">
@@ -81,7 +81,7 @@ const SideBar = ({ sidebarOpen, setSidebarOpen }) => {
 
                         <a
                             href="/"
-                            className="flex items-center gap-2 px-4 py-3 rounded-lg bg-blue-600 text-white"
+                            className="flex items-center gap-2 px-4 py-3 rounded-lg text-slate-300 hover:bg-slate-700 hover:text-white transition"
                         >
                             <FaTachometerAlt />
                                <button onClick={()=> navigate("/")}></button>
@@ -89,28 +89,28 @@ const SideBar = ({ sidebarOpen, setSidebarOpen }) => {
                         </a>
 
                         <a
-                            href="/AddStudent"
-                            className="flex items-center gap-4 px-4 py-3 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition"
+                            href="/student-dashboard"
+                            className="flex items-center gap-4 px-4 py-3 rounded-lg text-slate-300 hover:bg-slate-700 hover:text-white transition"
                         >
                             <FaUserGraduate />
-                            <button onClick={()=> navigate("/AddStudent")}>
+                            <button onClick={()=> navigate("/student-dashboard")}>
                             <span>Students</span>
                             </button>
                         </a>
 
                         <a
-                            href="#"
-                            className="flex items-center gap-4 px-4 py-3 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition"
+                            href="/teacher-dashboard"
+                            className="flex items-center gap-4 px-4 py-3 rounded-lg text-slate-300 hover:bg-slate-700 hover:text-white transition"
                         >
                             <FaChalkboardTeacher />
-                             <button onClick={()=> navigate("/AddTeacher")}>
+                             <button onClick={()=> navigate("/teacher-dashboard")}>
                             <span>Teachers</span>
                             </button>
                         </a>
 
                         <a
                             href="/class-dashboard"
-                            className="flex items-center gap-2 px-4 py-3 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition"
+                            className="flex items-center gap-2 px-4 py-3 rounded-lg text-slate-300 hover:bg-slate-700 hover:text-white transition"
                         >
                             <FaSchool />
                             <button onClick={()=> navigate("/ClassDashboard")}></button>
@@ -118,16 +118,17 @@ const SideBar = ({ sidebarOpen, setSidebarOpen }) => {
                         </a>
 
                         <a
-                            href="#"
-                            className="flex items-center gap-4 px-4 py-3 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition"
+                            href="/attendance-home"
+                            className="flex items-center gap-2 px-4 py-3 rounded-lg text-slate-300 hover:bg-slate-700 hover:text-white transition"
                         >
                             <FaClipboardCheck />
+                          <button onClick={()=> navigate("/AttendanceHome")}></button>
                             <span>Attendance</span>
                         </a>
 
                         <a
                             href="#"
-                            className="flex items-center gap-4 px-4 py-3 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition"
+                            className="flex items-center gap-4 px-4 py-3 rounded-lg text-slate-300 hover:bg-slate-700 hover:text-white transition"
                         >
                             <FaMoneyBillWave />
                             <span>Fees</span>
@@ -135,7 +136,7 @@ const SideBar = ({ sidebarOpen, setSidebarOpen }) => {
 
                         <a
                             href="#"
-                            className="flex items-center gap-4 px-4 py-3 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition"
+                            className="flex items-center gap-4 px-4 py-3 rounded-lg text-slate-300 hover:bg-slate-700 hover:text-white transition"
                         >
                             <FaChartBar />
                             <span>Reports</span>
@@ -152,7 +153,7 @@ const SideBar = ({ sidebarOpen, setSidebarOpen }) => {
 
                         <a
                             href="#"
-                            className="flex items-center gap-4 px-4 py-3 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition"
+                            className="flex items-center gap-4 px-4 py-3 rounded-lg text-slate-300 hover:bg-slate-700 hover:text-white transition"
                         >
                             <FaCog />
                             <span>Settings</span>

@@ -1,297 +1,247 @@
 
-import React, { useState } from "react";
-import { createStudent } from "../api/studentApi";
+import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { ArrowLeft, Save, UserRound } from "lucide-react";
+import { createStudent, updateStudent } from "../api/studentApi";
 
+const initialFormData = {
+    name: "",
+    email: "",
+    class: "",
+    section: "",
+    address: "",
+    parentname: "",
+    parentphone: "",
+};
 
+const StudentForm = ({ student }) => {
+    const navigate = useNavigate();
 
-const StudentForm = () => {
+    // Determine whether we are adding or editing
+    const isEditing = Boolean(student?._id);
 
-    const [formData, setFormData] = useState({
-        name: "",
-        email: "",
-        class: "",
-        section: "",
-        address: "",
-        parentname: "",
-        parentphone: ""
-    });
-
+    const [formData, setFormData] = useState(initialFormData);
     const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState("");
     const [error, setError] = useState("");
 
-    // Handle input changes
+    // Load existing student data into the form
+    useEffect(() => {
+        if (student) {
+            setFormData({
+                name: student.name || "",
+                email: student.email || "",
+                class: student.class || "",
+                section: student.section || "",
+                address: student.address || "",
+                parentname: student.parentname || "",
+                parentphone: student.parentphone || "",
+            });
+        } else {
+            setFormData({ ...initialFormData });
+        }
+    }, [student]);
+
     const handleChange = (e) => {
         const { name, value } = e.target;
 
-        setFormData({
-            ...formData,
-            [name]: value
-        });
+        setFormData((previous) => ({
+            ...previous,
+            [name]: value,
+        }));
     };
 
-    // Submit form
     const handleSubmit = async (e) => {
         e.preventDefault();
 
+        if (loading) return;
+
+        setLoading(true);
         setMessage("");
         setError("");
 
         try {
-            setLoading(true);
+            const studentData = {
+                name: formData.name.trim(),
+                email: formData.email.trim(),
+                class: formData.class,
+                section: formData.section.trim(),
+                address: formData.address.trim(),
+                parentname: formData.parentname.trim(),
+               parentphone: String(formData.parentphone ?? "").trim(),
+            };
 
-            const response = await createStudent(formData);
+            if (isEditing) {
+                // Update the selected student's existing record
+                await updateStudent(student._id, studentData);
+                setMessage("Student updated successfully!");
+            } else {
+                // Create a new student record
+                await createStudent(studentData);
+                setMessage("Student added successfully!");
+            }
 
-            console.log(response.data);
-
-            setMessage("Student added successfully!");
-
-            // Clear form
-            setFormData({
-                name: "",
-                email: "",
-                class: "",
-                section: "",
-                address: "",
-                parentname: "",
-                parentphone: ""
-            });
-
-        } catch (error) {
-
-            console.log(error);
+            // Navigate to the actual dashboard route
+            setTimeout(() => {
+                navigate("/student-dashboard");
+            }, 800);
+        } catch (err) {
+            console.error("Error saving student:", err);
 
             setError(
-                error.response?.data?.message ||
-                "Failed to add student"
+                err.response?.data?.message ||
+                    "Unable to save student. Please try again."
             );
-
         } finally {
             setLoading(false);
         }
     };
 
+    const inputClass =
+        "w-full rounded-xl border border-gray-200 px-4 py-3 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100";
+
     return (
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-
-            <div className="mb-6">
-                <h2 className="text-2xl font-bold text-gray-800">
-                    Student Information
-                </h2>
-
-                <p className="text-gray-500 mt-1">
-                    Enter the student's information below.
-                </p>
-            </div>
-
-            {/* Success Message */}
-            {message && (
-                <div className="mb-5 p-4 rounded-lg bg-green-50 border border-green-200 text-green-700">
-                    {message}
-                </div>
-            )}
-
-            {/* Error Message */}
-            {error && (
-                <div className="mb-5 p-4 rounded-lg bg-red-50 border border-red-200 text-red-700">
-                    {error}
-                </div>
-            )}
-
+        <div className="w-full">
             <form onSubmit={handleSubmit}>
-
-                {/* Name + Email */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">
-
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Student Name
-                        </label>
-
-                        <input
-                            type="text"
-                            name="name"
-                            value={formData.name}
-                            onChange={handleChange}
-                            placeholder="Enter student name"
-                            required
-                            className="w-full border border-gray-300 rounded-lg px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        />
+                {message && (
+                    <div className="mb-5 rounded-xl border border-green-200 bg-green-50 p-4 text-sm text-green-700">
+                        {message}
                     </div>
+                )}
 
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Email
-                        </label>
-
-                        <input
-                            type="email"
-                            name="email"
-                            value={formData.email}
-                            onChange={handleChange}
-                            placeholder="Enter email address"
-                            required
-                            className="w-full border border-gray-300 rounded-lg px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        />
+                {error && (
+                    <div className="mb-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+                        {error}
                     </div>
+                )}
 
-                </div>
-
-                {/* Class + Section */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">
-
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Class
-                        </label>
-
-                        <select
-                            name="class"
-                            value={formData.class}
-                            onChange={handleChange}
-                            required
-                            className="w-full border border-gray-300 rounded-lg px-4 py-3 bg-white outline-none focus:ring-2 focus:ring-blue-500"
-                        >
-                            <option value="">
-                                Select Class
-                            </option>
-
-                            <option value="1">Class 1</option>
-                            <option value="2">Class 2</option>
-                            <option value="3">Class 3</option>
-                            <option value="4">Class 4</option>
-                            <option value="5">Class 5</option>
-                            <option value="6">Class 6</option>
-                            <option value="7">Class 7</option>
-                            <option value="8">Class 8</option>
-                            <option value="9">Class 9</option>
-                            <option value="10">Class 10</option>
-                            <option value="+2">+2</option>
-
-                        </select>
-                    </div>
-
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Section
-                        </label>
-
-                        <select
-                            name="section"
-                            value={formData.section}
-                            onChange={handleChange}
-                            required
-                            className="w-full border border-gray-300 rounded-lg px-4 py-3 bg-white outline-none focus:ring-2 focus:ring-blue-500"
-                        >
-                            <option value="">
-                                Select Section
-                            </option>
-
-                            <option value="A">Section A</option>
-                            <option value="B">Section B</option>
-                            <option value="C">Section C</option>
-                            <option value="D">Section D</option>
-
-                        </select>
-                    </div>
-
-                </div>
-
-                {/* Address */}
-                <div className="mb-6">
-
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Address
-                    </label>
-
-                    <input
-                        type="text"
-                        name="address"
-                        value={formData.address}
+                <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                    <FormField
+                        label="Student Name"
+                        name="name"
+                        value={formData.name}
                         onChange={handleChange}
-                        placeholder="Enter student's address"
+                        placeholder="Enter student name"
                         required
-                        className="w-full border border-gray-300 rounded-lg px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     />
 
-                </div>
+                    <FormField
+                        label="Email Address"
+                        name="email"
+                        type="email"
+                        value={formData.email}
+                        onChange={handleChange}
+                        placeholder="Enter email address"
+                        required
+                    />
 
-                {/* Parent Name */}
-                <div className="mb-6">
+                    <FormField
+                        label="Class"
+                        name="class"
+                        value={formData.class}
+                        onChange={handleChange}
+                        placeholder="e.g. Six"
+                        required
+                    />
 
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Parent Name
-                    </label>
+                    <FormField
+                        label="Section"
+                        name="section"
+                        value={formData.section}
+                        onChange={handleChange}
+                        placeholder="e.g. A"
+                    />
 
-                    <input
-                        type="text"
+                    <FormField
+                        label="Parent / Guardian Name"
                         name="parentname"
                         value={formData.parentname}
                         onChange={handleChange}
-                        placeholder="Enter student's Parent Name"
-                        required
-                        className="w-full border border-gray-300 rounded-lg px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="Enter parent name"
                     />
 
-                </div>
-
-                {/* Parent Phone Number */}
-                <div className="mb-6">
-
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Parent Phone
-                    </label>
-
-                    <input
-                        type="text"
+                    <FormField
+                        label="Parent Phone"
                         name="parentphone"
                         value={formData.parentphone}
                         onChange={handleChange}
-                        placeholder="Enter student's Parent Phone"
-                        required
-                        className="w-full border border-gray-300 rounded-lg px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="Enter parent phone"
                     />
 
+                    <div className="md:col-span-2">
+                        <label className="mb-2 block text-sm font-semibold text-gray-700">
+                            Address
+                        </label>
+
+                        <textarea
+                            name="address"
+                            value={formData.address}
+                            onChange={handleChange}
+                            rows={3}
+                            placeholder="Enter student's address"
+                            className={inputClass}
+                        />
+                    </div>
                 </div>
 
-                {/* Buttons */}
-                <div className="flex gap-4">
+                <div className="mt-8 flex flex-col-reverse gap-3 border-t border-gray-100 pt-6 sm:flex-row sm:justify-end">
+                    <button
+                        type="button"
+                        onClick={() => navigate(-1)}
+                        className="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 px-5 py-3 font-semibold text-gray-700 transition hover:bg-gray-50"
+                    >
+                        <ArrowLeft size={18} />
+                        Cancel
+                    </button>
 
                     <button
                         type="submit"
                         disabled={loading}
-                        className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white px-6 py-3 rounded-lg font-medium transition"
+                        className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-6 py-3 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                        {loading ? "Adding Student..." : "Add Student"}
-                    </button>
+                        {isEditing ? (
+                            <Save size={18} />
+                        ) : (
+                            <UserRound size={18} />
+                        )}
 
-                    <button
-                        type="button"
-                        onClick={() =>
-                            setFormData({
-                                name: "",
-                                email: "",
-                                class: "",
-                                section: "",
-                                address: "",
-                                parentname: "",
-                                parentphone: ""
-                            })
-                        }
-                        className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-6 py-3 rounded-lg font-medium transition"
-                    >
-                        Clear
+                        {loading
+                            ? "Saving..."
+                            : isEditing
+                              ? "Update Student"
+                              : "Save Student"}
                     </button>
-
                 </div>
-
             </form>
-
         </div>
-
-    
-
     );
 };
+
+const FormField = ({
+    label,
+    name,
+    value,
+    onChange,
+    placeholder,
+    type = "text",
+    required = false,
+}) => (
+    <div>
+        <label className="mb-2 block text-sm font-semibold text-gray-700">
+            {label}
+            {required && <span className="ml-1 text-red-500">*</span>}
+        </label>
+
+        <input
+            type={type}
+            name={name}
+            value={value}
+            onChange={onChange}
+            placeholder={placeholder}
+            required={required}
+            className="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+        />
+    </div>
+);
 
 export default StudentForm;
