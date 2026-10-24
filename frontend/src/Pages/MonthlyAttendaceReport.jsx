@@ -1,6 +1,6 @@
-
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+
 import {
   Search,
   Download,
@@ -14,38 +14,262 @@ import {
   FileSpreadsheet,
   AlertCircle,
   ArrowLeft,
+  X,
+  RotateCcw,
 } from "lucide-react";
 
-// import { getAttendance } from "../../api/attendanceApi";
+import { getAttendance } from "../api/attendanceApi";
+
+// --------------------------------------------------
+// Constants
+// --------------------------------------------------
 
 const MONTHS = [
-  "January", "February", "March", "April",
-  "May", "June", "July", "August",
-  "September", "October", "November", "December",
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
 ];
+
+const TIME_ZONE = "Asia/Kathmandu";
+
+// --------------------------------------------------
+// Helper Functions
+// --------------------------------------------------
+
+const getToday = () => {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+
+  const values = {};
+
+  parts.forEach((part) => {
+    if (part.type !== "literal") {
+      values[part.type] = part.value;
+    }
+  });
+
+  return `${values.year}-${values.month}-${values.day}`;
+};
+
+const getDateKey = (value) => {
+  if (!value) return "";
+
+  // Avoid timezone shifts for YYYY-MM-DD values.
+  if (
+    typeof value === "string" &&
+    /^\d{4}-\d{2}-\d{2}$/.test(value)
+  ) {
+    return value;
+  }
+
+  const parsedDate = new Date(value);
+
+  if (Number.isNaN(parsedDate.getTime())) {
+    return "";
+  }
+
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(parsedDate);
+
+  const values = {};
+
+  parts.forEach((part) => {
+    if (part.type !== "literal") {
+      values[part.type] = part.value;
+    }
+  });
+
+  return `${values.year}-${values.month}-${values.day}`;
+};
+
+const getId = (value) => {
+  if (!value) return "";
+
+  if (typeof value === "object") {
+    return String(value._id || value.id || "");
+  }
+
+  return String(value);
+};
+
+const getStudentName = (record) => {
+  const student = record?.student;
+
+  if (student && typeof student === "object") {
+    if (student.name) return student.name;
+
+    const firstName = student.firstName || student.firstname || "";
+    const lastName = student.lastName || student.lastname || "";
+
+    const fullName = `${firstName} ${lastName}`.trim();
+
+    return (
+      fullName ||
+      student.studentName ||
+      student.fullName ||
+      record.studentName ||
+      "Unknown Student"
+    );
+  }
+
+  return record?.studentName || "Unknown Student";
+};
+
+const getStudentIdentifier = (record) => {
+  const student = record?.student;
+
+  if (student && typeof student === "object") {
+    return String(
+      student.studentId ||
+        student.rollNumber ||
+        student.admissionNumber ||
+        student._id ||
+        ""
+    );
+  }
+
+  return String(
+    record?.studentId ||
+      (typeof student === "string" ? student : "") ||
+      ""
+  );
+};
+
+const getClassName = (record) => {
+  const attendanceClass = record?.attendanceclass;
+
+  if (attendanceClass && typeof attendanceClass === "object") {
+    return (
+      attendanceClass.className ||
+      attendanceClass.classname ||
+      attendanceClass.name ||
+      attendanceClass.grade ||
+      attendanceClass.title ||
+      "Unknown Class"
+    );
+  }
+
+  return (
+    record?.className ||
+    record?.classname ||
+    (attendanceClass ? String(attendanceClass) : "Unknown Class")
+  );
+};
+
+const getClassFilterValue = (record) => {
+  const attendanceClass = record?.attendanceclass;
+
+  if (attendanceClass && typeof attendanceClass === "object") {
+    return String(
+      attendanceClass._id ||
+        attendanceClass.id ||
+        getClassName(record)
+    );
+  }
+
+  return String(
+    attendanceClass ||
+      record?.className ||
+      record?.classname ||
+      "Unknown Class"
+  );
+};
+
+const getSection = (record) => {
+  return String(record?.section || "").trim() || "-";
+};
+
+const getNormalizedStatus = (record) => {
+  const status = String(record?.status || "")
+    .trim()
+    .toLowerCase();
+
+  if (status === "present") return "present";
+  if (status === "absent") return "absent";
+  if (status === "late") return "late";
+
+  if (status === "leave" || status === "on leave") {
+    return "leave";
+  }
+
+  return "unknown";
+};
+
+const formatDate = (value) => {
+  const dateKey = getDateKey(value);
+
+  if (!dateKey) return "N/A";
+
+  const [year, month, day] = dateKey.split("-");
+
+  return `${day}/${month}/${year}`;
+};
+
+const escapeCSV = (value) => {
+  return `"${String(value ?? "").replace(/"/g, '""')}"`;
+};
+
+// --------------------------------------------------
+// Monthly Attendance Report
+// --------------------------------------------------
 
 const MonthlyAttendanceReport = () => {
   const navigate = useNavigate();
-  const today = new Date();
 
   const [attendance, setAttendance] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
+  const [exportMessage, setExportMessage] = useState("");
 
-  const [selectedMonth, setSelectedMonth] = useState(today.getMonth());
-  const [selectedYear, setSelectedYear] = useState(today.getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState(
+    () => Number(getToday().split("-")[1]) - 1
+  );
+
+  const [selectedYear, setSelectedYear] = useState(
+    () => Number(getToday().split("-")[0])
+  );
+
   const [selectedClass, setSelectedClass] = useState("All");
   const [selectedSection, setSelectedSection] = useState("All");
   const [search, setSearch] = useState("");
 
-  // Fetch attendance records
-  const fetchAttendance = async () => {
+  // --------------------------------------------------
+  // Fetch Attendance Records
+  // --------------------------------------------------
+
+  const fetchAttendance = useCallback(async () => {
     try {
       setLoading(true);
       setError("");
+      setExportMessage("");
 
       const response = await getAttendance();
-      setAttendance(response.data.attendance || []);
+
+      const records = Array.isArray(response?.data)
+        ? response.data
+        : Array.isArray(response?.data?.attendance)
+          ? response.data.attendance
+          : [];
+
+      setAttendance(records);
     } catch (err) {
       console.error("Failed to fetch attendance:", err);
 
@@ -55,67 +279,109 @@ const MonthlyAttendanceReport = () => {
       );
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchAttendance();
-  }, []);
+  }, [fetchAttendance]);
 
-  // Available classes
+  const handleRefresh = () => {
+    setRefreshing(true);
+    fetchAttendance();
+  };
+
+  // --------------------------------------------------
+  // Available Classes
+  // --------------------------------------------------
+
   const classes = useMemo(() => {
-    return [
-      ...new Set(
-        attendance
-          .map((record) => record.attendanceclass?.classname)
-          .filter(Boolean)
-      ),
-    ].sort();
-  }, [attendance]);
+    const uniqueClasses = new Map();
 
-  // Available sections based on selected class
-  const sections = useMemo(() => {
-    const filtered = attendance.filter((record) => {
-      const className = record.attendanceclass?.classname || "";
+    attendance.forEach((record) => {
+      const value = getClassFilterValue(record);
+      const label = getClassName(record);
 
-      return selectedClass === "All" || className === selectedClass;
+      if (value && label) {
+        uniqueClasses.set(value, {
+          value,
+          label,
+        });
+      }
     });
 
-    return [
-      ...new Set(
-        filtered.map((record) => record.section).filter(Boolean)
-      ),
-    ].sort();
+    return Array.from(uniqueClasses.values()).sort((a, b) =>
+      a.label.localeCompare(b.label, undefined, {
+        numeric: true,
+      })
+    );
+  }, [attendance]);
+
+  // --------------------------------------------------
+  // Available Sections
+  // --------------------------------------------------
+
+  const sections = useMemo(() => {
+    const uniqueSections = new Set();
+
+    attendance.forEach((record) => {
+      const matchesClass =
+        selectedClass === "All" ||
+        getClassFilterValue(record) === selectedClass;
+
+      if (matchesClass && record.section) {
+        uniqueSections.add(String(record.section).trim());
+      }
+    });
+
+    return Array.from(uniqueSections)
+      .filter(Boolean)
+      .sort((a, b) =>
+        a.localeCompare(b, undefined, { numeric: true })
+      );
   }, [attendance, selectedClass]);
 
-  // Filter attendance records
+  // --------------------------------------------------
+  // Filter Monthly Attendance Records
+  // --------------------------------------------------
+
   const filteredAttendance = useMemo(() => {
     const searchText = search.trim().toLowerCase();
 
     return attendance.filter((record) => {
-      if (!record.date) return false;
+      const dateKey = getDateKey(record.date);
 
-      const date = new Date(record.date);
+      if (!dateKey) return false;
 
-      if (Number.isNaN(date.getTime())) return false;
+      const [yearText, monthText] = dateKey.split("-");
 
-      const studentName = record.student?.name || "";
-      const className = record.attendanceclass?.classname || "";
+      const recordYear = Number(yearText);
+      const recordMonth = Number(monthText) - 1;
 
       const matchesMonth =
-        date.getMonth() === Number(selectedMonth) &&
-        date.getFullYear() === Number(selectedYear);
+        recordMonth === Number(selectedMonth) &&
+        recordYear === Number(selectedYear);
 
       const matchesClass =
-        selectedClass === "All" || className === selectedClass;
+        selectedClass === "All" ||
+        getClassFilterValue(record) === selectedClass;
 
       const matchesSection =
         selectedSection === "All" ||
-        record.section === selectedSection;
+        getSection(record) === selectedSection;
+
+      const studentName = getStudentName(record).toLowerCase();
+      const studentIdentifier =
+        getStudentIdentifier(record).toLowerCase();
+
+      const className = getClassName(record).toLowerCase();
 
       const matchesSearch =
-        studentName.toLowerCase().includes(searchText) ||
-        className.toLowerCase().includes(searchText);
+        !searchText ||
+        studentName.includes(searchText) ||
+        studentIdentifier.includes(searchText) ||
+        className.includes(searchText);
 
       return (
         matchesMonth &&
@@ -133,7 +399,10 @@ const MonthlyAttendanceReport = () => {
     search,
   ]);
 
-  // Group attendance records by student
+  // --------------------------------------------------
+  // Group Attendance by Student, Class, and Section
+  // --------------------------------------------------
+
   const monthlySummary = useMemo(() => {
     const students = new Map();
 
@@ -141,23 +410,23 @@ const MonthlyAttendanceReport = () => {
       const student = record.student;
 
       const studentId =
-        student?._id ||
-        record.studentId ||
-        (typeof student === "string" ? student : null);
+        getId(student) ||
+        getStudentIdentifier(record) ||
+        getStudentName(record);
 
-      if (!studentId) return;
+      const className = getClassName(record);
+      const classId = getClassFilterValue(record);
+      const section = getSection(record);
 
-      const className =
-        record.attendanceclass?.classname || "Unknown";
-
-      const section = record.section || "-";
-
-      const key = `${studentId}-${className}-${section}`;
+      // A student can have records in different classes or sections.
+      const key = `${studentId}-${classId}-${section}`;
 
       if (!students.has(key)) {
         students.set(key, {
+          key,
           studentId,
-          name: student?.name || "Unknown Student",
+          name: getStudentName(record),
+          identifier: getStudentIdentifier(record),
           className,
           section,
           present: 0,
@@ -169,35 +438,46 @@ const MonthlyAttendanceReport = () => {
       }
 
       const summary = students.get(key);
-      const status = (record.status || "").toLowerCase();
+      const status = getNormalizedStatus(record);
 
-      if (["present", "absent", "late", "leave"].includes(status)) {
+      if (
+        status === "present" ||
+        status === "absent" ||
+        status === "late" ||
+        status === "leave"
+      ) {
         summary[status] += 1;
         summary.total += 1;
       }
     });
 
     return Array.from(students.values())
-      .map((student) => ({
-        ...student,
-        percentage:
-          student.total > 0
-            ? ((student.present + student.late) / student.total) * 100
-            : 0,
-      }))
-      .filter((student) =>
-        student.name.toLowerCase().includes(search.trim().toLowerCase())
-      )
-      .sort((a, b) => a.name.localeCompare(b.name));
-  }, [filteredAttendance, search]);
+      .map((student) => {
+        const attended = student.present + student.late;
 
+        return {
+          ...student,
+          percentage:
+            student.total > 0
+              ? (attended / student.total) * 100
+              : 0,
+        };
+      })
+      .sort((a, b) =>
+        a.name.localeCompare(b.name)
+      );
+  }, [filteredAttendance]);
+
+  // --------------------------------------------------
   // Statistics
+  // --------------------------------------------------
+
   const stats = useMemo(() => {
     return filteredAttendance.reduce(
       (result, record) => {
         result.total += 1;
 
-        const status = (record.status || "").toLowerCase();
+        const status = getNormalizedStatus(record);
 
         if (status === "present") result.present += 1;
         if (status === "absent") result.absent += 1;
@@ -206,7 +486,13 @@ const MonthlyAttendanceReport = () => {
 
         return result;
       },
-      { total: 0, present: 0, absent: 0, late: 0, leave: 0 }
+      {
+        total: 0,
+        present: 0,
+        absent: 0,
+        late: 0,
+        leave: 0,
+      }
     );
   }, [filteredAttendance]);
 
@@ -243,14 +529,22 @@ const MonthlyAttendanceReport = () => {
     },
   ];
 
-  // Export student summary to CSV
+  // --------------------------------------------------
+  // Export Monthly Summary to CSV
+  // --------------------------------------------------
+
   const exportCSV = () => {
+    setExportMessage("");
+
     if (monthlySummary.length === 0) {
-      window.alert("There are no monthly records to export.");
+      setExportMessage(
+        "There are no monthly records to export. Please change your filters."
+      );
       return;
     }
 
     const headers = [
+      "Student ID",
       "Student Name",
       "Class",
       "Section",
@@ -258,10 +552,12 @@ const MonthlyAttendanceReport = () => {
       "Absent",
       "Late",
       "Leave",
+      "Total Marked Days",
       "Attendance Percentage",
     ];
 
     const rows = monthlySummary.map((student) => [
+      student.identifier,
       student.name,
       student.className,
       student.section,
@@ -269,11 +565,9 @@ const MonthlyAttendanceReport = () => {
       student.absent,
       student.late,
       student.leave,
+      student.total,
       `${student.percentage.toFixed(1)}%`,
     ]);
-
-    const escapeCSV = (value) =>
-      `"${String(value ?? "").replace(/"/g, '""')}"`;
 
     const csvContent = [headers, ...rows]
       .map((row) => row.map(escapeCSV).join(","))
@@ -294,17 +588,30 @@ const MonthlyAttendanceReport = () => {
     document.body.appendChild(link);
     link.click();
     link.remove();
+
     URL.revokeObjectURL(url);
+
+    setExportMessage("Monthly report exported successfully.");
   };
 
-  // Reset all filters
+  // --------------------------------------------------
+  // Reset Filters
+  // --------------------------------------------------
+
   const resetFilters = () => {
-    setSelectedMonth(today.getMonth());
-    setSelectedYear(today.getFullYear());
+    const today = getToday();
+
+    setSelectedMonth(Number(today.split("-")[1]) - 1);
+    setSelectedYear(Number(today.split("-")[0]));
     setSelectedClass("All");
     setSelectedSection("All");
     setSearch("");
+    setExportMessage("");
   };
+
+  // --------------------------------------------------
+  // UI
+  // --------------------------------------------------
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 sm:p-6 lg:p-8">
@@ -327,28 +634,29 @@ const MonthlyAttendanceReport = () => {
             </h1>
 
             <p className="mt-2 text-sm text-gray-500">
-              Review student attendance records and monthly summaries.
+              Review student attendance and monthly summaries.
             </p>
           </div>
 
           <div className="flex flex-wrap gap-3">
             <button
               type="button"
-              onClick={fetchAttendance}
-              disabled={loading}
-              className="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 shadow-sm transition hover:bg-gray-100 disabled:opacity-50"
+              onClick={handleRefresh}
+              disabled={loading || refreshing}
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 shadow-sm transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <RefreshCw
                 size={17}
-                className={loading ? "animate-spin" : ""}
+                className={refreshing ? "animate-spin" : ""}
               />
-              Refresh
+              {refreshing ? "Refreshing..." : "Refresh"}
             </button>
 
             <button
               type="button"
               onClick={exportCSV}
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
+              disabled={loading || monthlySummary.length === 0}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Download size={17} />
               Export CSV
@@ -356,37 +664,72 @@ const MonthlyAttendanceReport = () => {
           </div>
         </div>
 
-        {/* Error message */}
+        {/* Error Message */}
         {error && (
-          <div className="mb-6 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-red-700">
+          <div
+            role="alert"
+            className="mb-6 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-red-700"
+          >
             <AlertCircle size={20} className="mt-0.5 shrink-0" />
-            <div>
-              <p className="font-semibold">Could not load report</p>
+
+            <div className="flex-1">
+              <p className="font-semibold">
+                Could not load report
+              </p>
+
               <p className="mt-1 text-sm">{error}</p>
+
               <button
                 type="button"
-                onClick={fetchAttendance}
+                onClick={handleRefresh}
                 className="mt-2 text-sm font-semibold underline"
               >
                 Try again
               </button>
             </div>
+
+            <button
+              type="button"
+              onClick={() => setError("")}
+              aria-label="Dismiss error"
+              className="rounded p-1 hover:bg-red-100"
+            >
+              <X size={18} />
+            </button>
+          </div>
+        )}
+
+        {/* Export Message */}
+        {exportMessage && (
+          <div
+            role="status"
+            className="mb-6 flex items-start gap-2 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-700"
+          >
+            <FileSpreadsheet size={19} className="shrink-0" />
+            {exportMessage}
           </div>
         )}
 
         {/* Filters */}
-        <div className="mb-6 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+        <div className="mb-6 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm sm:p-6">
           <div className="mb-4 flex items-center justify-between gap-3">
-            <h2 className="font-semibold text-gray-800">
-              Filter Report
-            </h2>
+            <div>
+              <h2 className="font-semibold text-gray-800">
+                Filter Report
+              </h2>
+
+              <p className="mt-1 text-sm text-gray-500">
+                Choose a month, year, class, or section.
+              </p>
+            </div>
 
             <button
               type="button"
               onClick={resetFilters}
-              className="text-sm font-semibold text-blue-600 hover:text-blue-800"
+              className="inline-flex shrink-0 items-center gap-1 text-sm font-semibold text-blue-600 hover:text-blue-800"
             >
-              Reset Filters
+              <RotateCcw size={15} />
+              Reset
             </button>
           </div>
 
@@ -394,10 +737,15 @@ const MonthlyAttendanceReport = () => {
 
             {/* Month */}
             <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">
+              <label
+                htmlFor="report-month"
+                className="mb-2 block text-sm font-medium text-gray-700"
+              >
                 Month
               </label>
+
               <select
+                id="report-month"
                 value={selectedMonth}
                 onChange={(event) =>
                   setSelectedMonth(Number(event.target.value))
@@ -414,10 +762,15 @@ const MonthlyAttendanceReport = () => {
 
             {/* Year */}
             <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">
+              <label
+                htmlFor="report-year"
+                className="mb-2 block text-sm font-medium text-gray-700"
+              >
                 Year
               </label>
+
               <select
+                id="report-year"
                 value={selectedYear}
                 onChange={(event) =>
                   setSelectedYear(Number(event.target.value))
@@ -425,8 +778,10 @@ const MonthlyAttendanceReport = () => {
                 className="w-full rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
               >
                 {Array.from(
-                  { length: 7 },
-                  (_, index) => today.getFullYear() - 5 + index
+                  {
+                    length: 7,
+                  },
+                  (_, index) => Number(getToday().split("-")[0]) - 5 + index
                 ).map((year) => (
                   <option key={year} value={year}>
                     {year}
@@ -437,10 +792,15 @@ const MonthlyAttendanceReport = () => {
 
             {/* Class */}
             <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">
+              <label
+                htmlFor="report-class"
+                className="mb-2 block text-sm font-medium text-gray-700"
+              >
                 Class
               </label>
+
               <select
+                id="report-class"
                 value={selectedClass}
                 onChange={(event) => {
                   setSelectedClass(event.target.value);
@@ -449,9 +809,10 @@ const MonthlyAttendanceReport = () => {
                 className="w-full rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
               >
                 <option value="All">All Classes</option>
-                {classes.map((className) => (
-                  <option key={className} value={className}>
-                    {className}
+
+                {classes.map((item) => (
+                  <option key={item.value} value={item.value}>
+                    {item.label}
                   </option>
                 ))}
               </select>
@@ -459,10 +820,15 @@ const MonthlyAttendanceReport = () => {
 
             {/* Section */}
             <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">
+              <label
+                htmlFor="report-section"
+                className="mb-2 block text-sm font-medium text-gray-700"
+              >
                 Section
               </label>
+
               <select
+                id="report-section"
                 value={selectedSection}
                 onChange={(event) =>
                   setSelectedSection(event.target.value)
@@ -470,6 +836,7 @@ const MonthlyAttendanceReport = () => {
                 className="w-full rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
               >
                 <option value="All">All Sections</option>
+
                 {sections.map((section) => (
                   <option key={section} value={section}>
                     {section}
@@ -480,23 +847,39 @@ const MonthlyAttendanceReport = () => {
 
             {/* Search */}
             <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">
+              <label
+                htmlFor="report-search"
+                className="mb-2 block text-sm font-medium text-gray-700"
+              >
                 Search Student
               </label>
+
               <div className="relative">
                 <Search
                   size={18}
                   className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
                 />
+
                 <input
+                  id="report-search"
                   type="text"
                   value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Student name..."
+                  onChange={(event) =>
+                    setSearch(event.target.value)
+                  }
+                  placeholder="Name or student ID..."
                   className="w-full rounded-xl border border-gray-200 py-3 pl-10 pr-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                 />
               </div>
             </div>
+          </div>
+
+          <div className="mt-4 border-t border-gray-100 pt-4 text-sm text-gray-500">
+            Showing{" "}
+            <span className="font-semibold text-gray-800">
+              {filteredAttendance.length}
+            </span>{" "}
+            attendance records for {MONTHS[selectedMonth]} {selectedYear}.
           </div>
         </div>
 
@@ -528,7 +911,7 @@ const MonthlyAttendanceReport = () => {
           })}
         </div>
 
-        {/* Monthly Student Summary */}
+        {/* Student Monthly Summary */}
         <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
           <div className="flex flex-col gap-3 border-b border-gray-100 p-5 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -537,7 +920,7 @@ const MonthlyAttendanceReport = () => {
               </h2>
 
               <p className="mt-1 text-sm text-gray-500">
-                {MONTHS[Number(selectedMonth)]} {selectedYear}
+                {MONTHS[selectedMonth]} {selectedYear}
                 {" · "}
                 {monthlySummary.length} student/class summaries
               </p>
@@ -554,27 +937,72 @@ const MonthlyAttendanceReport = () => {
               <RefreshCw size={20} className="animate-spin" />
               Loading attendance report...
             </div>
+          ) : monthlySummary.length === 0 ? (
+            <div className="flex flex-col items-center px-5 py-16 text-center">
+              <CalendarDays
+                size={38}
+                className="mb-3 text-gray-300"
+              />
+
+              <h3 className="font-semibold text-gray-800">
+                No attendance records found
+              </h3>
+
+              <p className="mt-2 max-w-md text-sm text-gray-500">
+                There are no attendance records for the selected
+                month and filters. Try another month or reset your
+                filters.
+              </p>
+
+              <button
+                type="button"
+                onClick={resetFilters}
+                className="mt-5 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-blue-700"
+              >
+                Reset Filters
+              </button>
+            </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
+              <table className="w-full min-w-[1050px] text-left text-sm">
                 <thead className="bg-gray-50 text-gray-600">
                   <tr>
-                    <th className="px-5 py-4 font-semibold">S.N.</th>
-                    <th className="px-5 py-4 font-semibold">Student</th>
-                    <th className="px-5 py-4 font-semibold">Class</th>
-                    <th className="px-5 py-4 font-semibold">Section</th>
+                    <th className="px-5 py-4 font-semibold">
+                      S.N.
+                    </th>
+
+                    <th className="px-5 py-4 font-semibold">
+                      Student
+                    </th>
+
+                    <th className="px-5 py-4 font-semibold">
+                      Class
+                    </th>
+
+                    <th className="px-5 py-4 font-semibold">
+                      Section
+                    </th>
+
                     <th className="px-5 py-4 text-center font-semibold">
                       Present
                     </th>
+
                     <th className="px-5 py-4 text-center font-semibold">
                       Absent
                     </th>
+
                     <th className="px-5 py-4 text-center font-semibold">
                       Late
                     </th>
+
                     <th className="px-5 py-4 text-center font-semibold">
                       Leave
                     </th>
+
+                    <th className="px-5 py-4 text-center font-semibold">
+                      Total Days
+                    </th>
+
                     <th className="px-5 py-4 font-semibold">
                       Attendance %
                     </th>
@@ -582,103 +1010,91 @@ const MonthlyAttendanceReport = () => {
                 </thead>
 
                 <tbody className="divide-y divide-gray-100">
-                  {monthlySummary.length > 0 ? (
-                    monthlySummary.map((student, index) => (
-                      <tr
-                        key={`${student.studentId}-${student.className}-${student.section}`}
-                        className="transition hover:bg-gray-50"
-                      >
-                        <td className="px-5 py-4 text-gray-500">
-                          {index + 1}
-                        </td>
+                  {monthlySummary.map((student, index) => (
+                    <tr
+                      key={student.key}
+                      className="transition hover:bg-gray-50"
+                    >
+                      <td className="px-5 py-4 text-gray-500">
+                        {index + 1}
+                      </td>
 
-                        <td className="px-5 py-4 font-semibold text-gray-800">
+                      <td className="px-5 py-4">
+                        <div className="font-semibold text-gray-800">
                           {student.name}
-                        </td>
+                        </div>
 
-                        <td className="px-5 py-4 text-gray-600">
-                          {student.className}
-                        </td>
+                        <div className="mt-1 text-xs text-gray-500">
+                          {student.identifier || "No student ID"}
+                        </div>
+                      </td>
 
-                        <td className="px-5 py-4 text-gray-600">
-                          {student.section}
-                        </td>
+                      <td className="px-5 py-4 text-gray-600">
+                        {student.className}
+                      </td>
 
-                        <td className="px-5 py-4 text-center font-semibold text-green-700">
-                          {student.present}
-                        </td>
+                      <td className="px-5 py-4 text-gray-600">
+                        {student.section}
+                      </td>
 
-                        <td className="px-5 py-4 text-center font-semibold text-red-600">
-                          {student.absent}
-                        </td>
+                      <td className="px-5 py-4 text-center font-semibold text-green-700">
+                        {student.present}
+                      </td>
 
-                        <td className="px-5 py-4 text-center font-semibold text-amber-600">
-                          {student.late}
-                        </td>
+                      <td className="px-5 py-4 text-center font-semibold text-red-600">
+                        {student.absent}
+                      </td>
 
-                        <td className="px-5 py-4 text-center font-semibold text-purple-600">
-                          {student.leave}
-                        </td>
+                      <td className="px-5 py-4 text-center font-semibold text-amber-600">
+                        {student.late}
+                      </td>
 
-                        <td className="px-5 py-4">
-                          <div className="flex min-w-28 items-center gap-3">
-                            <div className="h-2 flex-1 overflow-hidden rounded-full bg-gray-100">
-                              <div
-                                className={`h-full rounded-full ${
-                                  student.percentage >= 90
-                                    ? "bg-green-500"
-                                    : student.percentage >= 75
-                                      ? "bg-amber-500"
-                                      : "bg-red-500"
-                                }`}
-                                style={{
-                                  width: `${Math.min(
-                                    student.percentage,
-                                    100
-                                  )}%`,
-                                }}
-                              />
-                            </div>
+                      <td className="px-5 py-4 text-center font-semibold text-purple-600">
+                        {student.leave}
+                      </td>
 
-                            <span className="min-w-12 font-semibold text-gray-700">
-                              {student.percentage.toFixed(1)}%
-                            </span>
+                      <td className="px-5 py-4 text-center font-medium text-gray-700">
+                        {student.total}
+                      </td>
+
+                      <td className="px-5 py-4">
+                        <div className="flex min-w-32 items-center gap-3">
+                          <div className="h-2 flex-1 overflow-hidden rounded-full bg-gray-100">
+                            <div
+                              className={`h-full rounded-full ${
+                                student.percentage >= 90
+                                  ? "bg-green-500"
+                                  : student.percentage >= 75
+                                    ? "bg-amber-500"
+                                    : "bg-red-500"
+                              }`}
+                              style={{
+                                width: `${Math.min(
+                                  student.percentage,
+                                  100
+                                )}%`,
+                              }}
+                            />
                           </div>
-                        </td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td
-                        colSpan={9}
-                        className="px-5 py-12 text-center"
-                      >
-                        <div className="flex flex-col items-center">
-                          <CalendarDays
-                            size={36}
-                            className="mb-3 text-gray-300"
-                          />
 
-                          <p className="font-semibold text-gray-700">
-                            No attendance records found
-                          </p>
-
-                          <p className="mt-1 text-sm text-gray-500">
-                            Try another month or change your filters.
-                          </p>
+                          <span className="min-w-12 text-right font-semibold text-gray-700">
+                            {student.percentage.toFixed(1)}%
+                          </span>
                         </div>
                       </td>
                     </tr>
-                  )}
+                  ))}
                 </tbody>
               </table>
             </div>
           )}
 
+          {/* Calculation Note */}
           <div className="border-t border-gray-100 bg-gray-50 px-5 py-4 text-xs leading-5 text-gray-500">
-            Attendance percentage is calculated as (Present + Late) ÷
-            (Present + Absent + Late + Leave) × 100. Confirm your school's
-            policy for whether Late should count as attended.
+            Attendance percentage = (Present + Late) ÷ Total
+            Marked Days × 100. Total Marked Days includes Present,
+            Absent, Late, and Leave records. Unrecognized statuses
+            are excluded from the calculation.
           </div>
         </div>
       </div>
